@@ -1,0 +1,309 @@
+#------------------------------------------------------------------------------------------------------------------------------
+# Dockerfile to build a Docker image running the Ghub ghubex1 Jupyter notebook with Pegasus WMS HPC.
+#
+# Component of: GhubTools
+# Purpose: Run a Pegasus WMS workflow on Amazon AWS
+# Author: Renette Jones-Ivey, August Skies, LLC
+# Date: September 2026
+#
+# Important: need to source ../configure_tool.sh before building the ghub ghubex1 tool image Docker image.
+# See ../configure_tool.sh for more information.
+#------------------------------------------------------------------------------------------------------------------------------
+
+# References:
+# https://github.com/pegasus-isi/pegasus/tree/master/tutorial/docker/Dockerfile
+# https://pegasus.isi.edu/documentation/user-guide/tutorial.html
+# https://pegasus.isi.edu/documentation/user-guide/deployment-scenarios.html#
+# https://aws.amazon.com/blogs/compute/creating-a-simple-fetch-and-run-aws-batch-job
+
+# ====================================================================
+# System installations
+# ====================================================================
+
+# A major enterprise-grade Linux operating system released by Canonical on April 25, 2024.
+FROM ubuntu:24.04
+
+LABEL desc="ghub ghubex1 tool docker image for Pegasus WMS HPC."
+
+# Set environment variable to avoid interactive prompts during installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \ 
+    ca-certificates \
+    curl \
+    dmsetup \
+    git \    
+    gnupg \
+    jq \
+    locales \
+    lsb-release \
+    openjdk-11-jdk \
+    openssh-client \
+    rsync \
+    sudo \
+    supervisor \ 
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Locale and timezone
+RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen && \
+    locale-gen
+# Set environment variables for the system language
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
+#ENV LANG en_US.UTF-8
+#RUN cp /usr/share/zoneinfo/America/New_York /etc/localtime
+
+# ====================================================================
+# User Configurations
+# ====================================================================
+
+# jovyan is the default user in Jupyter Docker Stacks containers. The term is a pun on "Jovian" (like Jupiter), coined to represent members of the Jupyter community.
+
+#ubuntu groupadd: GID '1000' already exists
+#ubuntu useradd: UID 1000 is not unique
+
+# Set environment variables for Jupyter
+ENV TOOL=ghubex1
+ENV NB_USER=jovyan
+ENV NB_UID=1001
+ENV NB_GROUP=jovyan
+ENV NB_GID=1001
+ENV HOME=/home/${NB_USER}
+ENV SHELL=/bin/bash
+
+#RUN groupadd --gid 808 submithost-group
+#RUN useradd --gid 808 --uid 550 --create-home --password '$6$ouJkMasm5X8E4Aye$QTFH2cHk4b8/TmzAcCxbTz7Y84xyNFs.gqm/HWEykdngmOgELums1qOi3e6r8Z.j7GEA9bObS/2pTN1WArGNf0' submithost
+
+RUN groupadd --gid ${NB_GID} ${NB_GROUP} || true && \
+    useradd --gid ${NB_GID} --uid ${NB_UID} --create-home --password '$6$ouJkMasm5X8E4Aye$QTFH2cHk4b8/TmzAcCxbTz7Y84xyNFs.gqm/HWEykdngmOgELums1qOi3e6r8Z.j7GEA9bObS/2pTN1WArGNf0' ${NB_USER}
+
+RUN usermod -aG sudo ${NB_USER} && \
+    echo "${NB_USER} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/${NB_USER} && \
+    chmod 0440 /etc/sudoers.d/${NB_USER}
+
+# ====================================================================
+# Docker installation using the apt repository
+# ====================================================================
+
+# https://docs.docker.com/engine/install/ubuntu/
+
+RUN install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && \
+    chmod a+r /etc/apt/keyrings/docker.asc && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
+
+# Install Docker CE, CLI, and containerd plugins
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin && \
+    rm -rf /var/lib/apt/lists/*
+
+# Expose default Docker daemon port (optional, useful if accessing remotely)
+EXPOSE 2375 2376
+
+CMD ["docker", "--version"]
+
+# ====================================================================
+# HTCondor installation
+# ====================================================================
+
+# Create directory for the signing key
+#sudo mkdir -p /etc/apt/keyrings
+
+# See https://research.cs.wisc.edu/htcondor/tarball/ for bosco tarballs
+RUN curl -fsSL https://htcss-downloads.chtc.wisc.edu/repo/keys/HTCondor-24.0-Key | sudo tee /etc/apt/keyrings/htcondor.asc > /dev/null \
+    && curl -fsSL https://htcss-downloads.chtc.wisc.edu/repo/ubuntu/htcondor-24.0-noble.list | sudo tee /etc/apt/sources.list.d/htcondor.list > /dev/null
+#RUN cat /etc/apt/sources.list.d/htcondor.list
+
+ADD ./submithost/pegasus-wms-setup-files/10-dynamic-slots /etc/condor/config.d/10-dynamic-slots
+
+# Install HTCondor
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    minihtcondor \
+    && rm -rf /var/lib/apt/lists/*
+
+CMD ["htcondor", "--version"]
+CMD ["condor", "--version"]
+
+EXPOSE 9618
+
+# ====================================================================
+# Pegasus installation
+# ====================================================================
+
+# Pegasus -- rebuild everything below here
+#            http://dev.im-bot.com/docker-select-caching/
+
+# https://pegasus.isi.edu/downloads/
+# Add the Pegasus GPG key
+RUN wget -O /etc/apt/trusted.gpg.d/pegasus.asc https://download.pegasus.isi.edu/pegasus/gpg.txt
+
+RUN echo $(dpkg --print-architecture)
+
+# Create the repository list file for Ubuntu 24.04
+RUN echo 'deb [arch=amd64] https://download.pegasus.isi.edu/pegasus/ubuntu noble main' | sudo tee /etc/apt/sources.list.d/pegasus.list
+
+# Install Pegasus
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pegasus \
+    && rm -rf /var/lib/apt/lists/*
+
+# ====================================================================
+# Anaconda installations
+# ====================================================================
+
+WORKDIR /home
+
+RUN mkdir anaconda
+
+# https://repo.anaconda.com/miniconda/
+COPY ./anaconda/Miniconda3-py310_25.11.1-1-Linux-x86_64.sh /home/anaconda
+
+WORKDIR /home/anaconda
+
+ENV CONDA_DIR=/home/anaconda/ubuntu24
+RUN chmod +x Miniconda3-py310_25.11.1-1-Linux-x86_64.sh
+RUN /bin/bash Miniconda3-py310_25.11.1-1-Linux-x86_64.sh -b -p $CONDA_DIR
+ENV PATH=$CONDA_DIR/bin:$PATH
+RUN which conda
+RUN conda --version
+
+# The version of the jupyterhub package installed must be the same version used by the main Hub.
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 
+RUN conda install -c conda-forge --name base jupyter jupyterhub==5.2.1 -y
+#RUN jupyter nbextension enable --py --sys-prefix widgetsnbextension
+
+WORKDIR /home
+
+COPY ./anaconda/install_conda_environment_and_kernel_from_yml.sh /home/anaconda/install_conda_environment_and_kernel_from_yml.sh
+COPY ./anaconda/ubuntu24_pegasus-env_environment.yml /home/anaconda/ubuntu24_pegasus-env_environment.yml
+WORKDIR /home/anaconda
+
+# Install the pegasus-wms environment and kernel
+RUN chmod +x install_conda_environment_and_kernel_from_yml.sh
+RUN /bin/bash install_conda_environment_and_kernel_from_yml.sh ubuntu24 pegasus-env
+
+# Appmode - Jupyter extension that turns notebooks into web applications
+#RUN python3 -m pip install appmode
+#RUN jupyter nbextension enable --py --sys-prefix appmode
+#RUN jupyter serverextension enable --py --sys-prefix appmode
+
+# ===================================================================
+# PegasusWMS configurations
+# ====================================================================
+
+# For the Docker build, cd ~ > /root
+# ./submithost/aws/config users' account ID is not needed.
+# ./aws/config should not have any region specified.
+ADD ./submithost/amazon-aws-credentials/.aws/credentials /root/.aws/credentials
+ADD ./submithost/amazon-aws-credentials/.pegasus /root/.pegasus
+
+# Required for boto3
+# boto3 is the official Software Development Kit (SDK) for Python provided by Amazon Web Services (AWS)
+ADD ./submithost/amazon-aws-credentials/.aws /home/${NB_USER}/.aws
+RUN chown -R ${NB_USER}:${NB_GROUP} /home/${NB_USER}/.aws
+ADD ./submithost/amazon-aws-credentials/.pegasus/credentials.conf /home/${NB_USER}/.pegasus/credentials.conf
+RUN chown -R ${NB_USER}:${NB_GROUP} /home/${NB_USER}/.pegasus/credentials.conf
+RUN chmod 600 /home/${NB_USER}/.pegasus/credentials.conf
+
+#ADD ./submithost/pegasus-wms-setup-files/remote_gahp /usr/sbin/remote_gahp
+#RUN chmod +x /usr/sbin/remote_gahp
+
+ADD ./submithost/pegasus-wms-setup-files/start.sh /start.sh
+ADD ./submithost/pegasus-wms-setup-files/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+ADD ./submithost/pegasus-wms-setup-files/wrapdocker /usr/local/bin/wrapdocker
+ADD ./submithost/pegasus-wms-setup-files/htcondor-wrapper /usr/local/bin/htcondor-wrapper
+ADD ./submithost/pegasus-wms-setup-files/99-ubuntu-docker.conf /etc/condor/condor.d/99-ubuntu-docker.conf
+ADD ./submithost/pegasus-wms-setup-files/00-minicondor /etc/condor/config.d/00-minicondor
+RUN chmod +x /usr/local/bin/wrapdocker /usr/local/bin/htcondor-wrapper
+RUN usermod -aG docker ${NB_USER}
+# Configure HTCondor t2o run without root requirements where possible
+#RUN mkdir -p /var/run/condor /var/lock/condor /var/loxg/condor \
+    #&& chown -R ${NB_USER}:${NB_GROUP} /var/run/condor /var/lock/condor /var/log/condor /etc/condor
+
+ADD ./submithost/pegasusrc /home/${NB_USER}/ghubex1/pegasusrc
+
+ADD ./submithost/pegasus-wms-scripts /home/${NB_USER}/ghubex1/pegasus-wms-scripts
+
+RUN echo -e "condor_master > /dev/null 2>&1" >> /home/${NB_USER}/.bashrc
+
+RUN mkdir /home/${NB_USER}/ghubex1/conf
+ADD ./submithost/pegasus-wms-configuration-files/compute-env.json /home/${NB_USER}/ghubex1/conf/compute-env.json
+# Add compute_env_json_template,
+# compute-env.json can be updated with user selected parameters for each workflow run.
+ADD ./submithost/pegasus-wms-configuration-files/compute_env_json_template /home/${NB_USER}/ghubex1/conf/compute_env_json_template
+ADD ./submithost/pegasus-wms-configuration-files/job-definition.json /home/${NB_USER}/ghubex1/conf/job-definition.json
+# Create job_definition_json_template from the job-definition.json configured with ./pegasus-wms-configure.sh,
+# job-definition.json can be updated with a user selected parameter for each workflow run.
+ADD ./submithost/pegasus-wms-configuration-files/job-definition.json /home/${NB_USER}/ghubex1/conf/job_definition_json_template
+ADD ./submithost/pegasus-wms-configuration-files/job-queue.json /home/${NB_USER}/ghubex1/conf/job-queue.json
+
+COPY ./submithost/.ssh /home/${NB_USER}/.ssh
+
+# The ./submithost/vortex-sshslurm-blahp directory contains scripts provided by Anthropic Claude
+ADD ./submithost/vortex-sshslurm-blahp /home/${NB_USER}/ghubex1/vortex-sshslurm-blahp
+RUN /home/${NB_USER}/ghubex1/vortex-sshslurm-blahp/install.sh --host VORTEX_USER@VORTEX_HOST --key ~/.ssh/id_ed25519 --remote-base /vscratch/grp-ghub/VORTEX_USER-temp/blahp_jobs 
+ADD ./submithost/pegasus-wms-setup-files/60-vortex-sshslurm.config /etc/condor/config.d/60-vortex-sshslurm.config
+
+# Set up config for ensemble manager and service
+#RUN mkdir /home/${NB_USER}/.pegasus \
+RUN echo -e "#!/usr/bin/env python3\nUSERNAME='${NB_USER}'\nPASSWORD='${NB_USER}123'\nAUTHENTICATION='NoAuthentication'\nSERVER_HOST='0.0.0.0'\n" >> /home/${NB_USER}/.pegasus/service.py \
+    && chmod u+x /home/${NB_USER}/.pegasus/service.py
+
+# ====================================================================
+# Notebook Configurations
+# ====================================================================
+
+WORKDIR /home/${NB_USER}
+
+COPY ./tools/ghubex1 /home/${NB_USER}/ghubex1
+
+RUN mkdir -p /home/${NB_USER}/.jupyter
+#COPY ./submithost/$config/jupyter_notebook_config.py ${HOME}/.jupyter/jupyter_notebook_config.py
+
+RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/Bash/Bash_Launch.sh
+RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/C/C_Build.sh
+RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/C/C_Launch.sh
+RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/CPP/CPP_Build.sh
+RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/CPP/CPP_Launch.sh
+RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/Fortran/Fortran_Build.sh
+RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/Fortran/Fortran_Launch.sh
+#RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/MATLAB/MATLAB_Build.sh
+#RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/MATLAB/MATLAB_Launch.sh
+RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/Python/Python_Launch.sh
+RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/R/R_Launch.sh
+
+RUN chown -R ${NB_USER}:${NB_GROUP} /home/${NB_USER}
+
+# User setup
+USER ${NB_USER}
+
+WORKDIR /home/${NB_USER}
+
+RUN pegasus-db-admin create
+
+WORKDIR /home/${NB_USER}
+
+#USER ${NB_USER}
+
+# Set Kernel for Jupyter (exposes PATH and PYTHONPATH for use when terminal from jupyter is used)
+#ADD ./submithost/pegasus-wms-setup-files/config/kernel.json /usr/local/share/jupyter/kernels/python3/kernel.json
+RUN echo -e "export PATH=/home/${NB_USER}/.pyenv/bin:\$PATH:/usr/lib64/mpich/bin" >> /home/${NB_USER}/.bashrcƒ
+
+# Set notebook password to 'emulator'. This pw will be used instead of token authentication
+#RUN mkdir /home/${NB_USER}/.jupyter \
+RUN echo "{ \"NotebookApp\": { \"password\": \"sha1:30a323540baa:6eec8eaf3b4e0f44f2f2aa7b504f80d5bf0ad745\" } }" >> /home/${NB_USER}/.jupyter/jupyter_notebook_config.json
+
+# For initial testing, comment out the USER root and the CMD, enter on command line:
+#docker run -it ghubex1_tool_image /bin/bash
+USER root
+CMD ["/start.sh"]
+
+

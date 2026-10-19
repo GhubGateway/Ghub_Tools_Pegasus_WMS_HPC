@@ -1,0 +1,17 @@
+#!/bin/bash -l
+
+echo "htcondor-wrapper..."
+
+tail -F `condor_config_val LOG`/MasterLog `condor_config_val LOG`/StartLog &
+
+# Source the persistent ssh-agent environment variables
+#if [ -f /etc/profile.d/ssh-agent.sh ]; then
+    #source /etc/profile.d/ssh-agent.sh
+#fi
+
+# Verify key is visible to this daemon context
+#echo "ssh-add -l..."
+#ssh-add -l
+
+exec /usr/sbin/condor_master -f
+

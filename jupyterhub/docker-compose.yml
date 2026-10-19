@@ -1,0 +1,28 @@
+# docker-compose.yml - JupyterHub deployment
+services:
+  jupyterhub:
+    build:
+      context: .
+      dockerfile: Dockerfile.hub
+    container_name: jupyterhub
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount the Docker socket so JupyterHub can spawn containers
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      # Persist JupyterHub's database (user accounts, server states)
+      - ./jupyterhub-data:/srv/jupyterhub/data
+    environment:
+      # c.DockerSpawner.volumes requires an absolute path because the Docker daemon running on the host machine performs the actual bind mount, and it cannot resolve relative paths without a full file system reference. Also see ./config/jupyterhub_config.py
+      - HOST_DEPLOY_DIR=${PWD}
+    networks:
+      - jupyterhub-network
+
+    restart: unless-stopped
+
+networks:
+  jupyterhub-network:
+    name: jupyterhub-network
+
+#volumes:
+  #jupyterhub-data:

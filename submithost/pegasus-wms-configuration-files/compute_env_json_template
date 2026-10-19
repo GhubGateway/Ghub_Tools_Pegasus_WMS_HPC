@@ -1,0 +1,26 @@
+{
+  
+  "state": "ENABLED",
+  "type": "MANAGED",
+  "computeResources": {
+    "subnets": [
+      "AMAZON_AWS_COMPUTE_ENV_SUBNET"
+    ],
+    "type": "EC2",
+    "tags": {
+      "Name": "Batch Instance - optimal"
+    },
+    "desiredvCpus": 0,
+    "minvCpus": 0,
+    "maxvCpus": 256,
+    "instanceTypes": [
+      "optimal"
+    ],
+    "securityGroupIds": [
+      "AMAZON_AWS_COMPUTE_ENV_SECURITY_GROUP"
+    ],
+    "instanceRole": "ecsInstanceRole" ,
+    "bidPercentage": 20
+  },
+  "serviceRole": "AWSBatchServiceRole"
+}

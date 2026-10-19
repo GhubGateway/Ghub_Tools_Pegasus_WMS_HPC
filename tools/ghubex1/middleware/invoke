@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# Reference: https://theghub.org/kb/development/invoke-scripts-for-jupyter-notebooks
+/usr/bin/invoke_app "$@" -C "start_jupyter -A -T @tool ghubex1.ipynb" -t ghubex1 -u anaconda-7 -r none

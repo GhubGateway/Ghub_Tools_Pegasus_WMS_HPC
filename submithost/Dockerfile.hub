@@ -1,0 +1,27 @@
+# Dockerfile.hub - Custom JupyterHub image for DockerSpawner
+
+FROM jupyterhub/jupyterhub:5.2.1
+
+# The cryocloud-test:local image is designed as a local test environment for the CryoCloud JupyterHub project. See https://github.com/CryoInTheCloud/hub-image.
+#FROM cryocloud-test:local
+
+USER root
+RUN echo $USER
+
+# Required for cryocloud-test:local
+#RUN apt-get update && apt-get install -y nodejs npm && \
+    #npm install -g configurable-http-proxy && \
+    #rm -rf /var/lib/apt/lists/*
+
+# Install DockerSpawner and Native Authenticator
+RUN pip install --no-cache-dir \
+    dockerspawner \
+    jupyterhub-nativeauthenticator
+
+# Copy the configuration file
+COPY ./config/jupyterhub_config.py /srv/jupyterhub/jupyterhub_config.py
+
+# Expose the Hub port
+EXPOSE 8000
+
+CMD ["jupyterhub", "-f", "/srv/jupyterhub/jupyterhub_config.py"]
