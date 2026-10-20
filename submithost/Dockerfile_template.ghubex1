@@ -196,25 +196,8 @@ RUN /bin/bash install_conda_environment_and_kernel_from_yml.sh ubuntu24 pegasus-
 #RUN jupyter serverextension enable --py --sys-prefix appmode
 
 # ===================================================================
-# PegasusWMS configurations
+# Pegasus WMS configurations
 # ====================================================================
-
-# For the Docker build, cd ~ > /root
-# ./submithost/aws/config users' account ID is not needed.
-# ./aws/config should not have any region specified.
-ADD ./submithost/amazon-aws-credentials/.aws/credentials /root/.aws/credentials
-ADD ./submithost/amazon-aws-credentials/.pegasus /root/.pegasus
-
-# Required for boto3
-# boto3 is the official Software Development Kit (SDK) for Python provided by Amazon Web Services (AWS)
-ADD ./submithost/amazon-aws-credentials/.aws /home/${NB_USER}/.aws
-RUN chown -R ${NB_USER}:${NB_GROUP} /home/${NB_USER}/.aws
-ADD ./submithost/amazon-aws-credentials/.pegasus/credentials.conf /home/${NB_USER}/.pegasus/credentials.conf
-RUN chown -R ${NB_USER}:${NB_GROUP} /home/${NB_USER}/.pegasus/credentials.conf
-RUN chmod 600 /home/${NB_USER}/.pegasus/credentials.conf
-
-#ADD ./submithost/pegasus-wms-setup-files/remote_gahp /usr/sbin/remote_gahp
-#RUN chmod +x /usr/sbin/remote_gahp
 
 ADD ./submithost/pegasus-wms-setup-files/start.sh /start.sh
 ADD ./submithost/pegasus-wms-setup-files/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
@@ -224,9 +207,6 @@ ADD ./submithost/pegasus-wms-setup-files/99-ubuntu-docker.conf /etc/condor/condo
 ADD ./submithost/pegasus-wms-setup-files/00-minicondor /etc/condor/config.d/00-minicondor
 RUN chmod +x /usr/local/bin/wrapdocker /usr/local/bin/htcondor-wrapper
 RUN usermod -aG docker ${NB_USER}
-# Configure HTCondor t2o run without root requirements where possible
-#RUN mkdir -p /var/run/condor /var/lock/condor /var/loxg/condor \
-    #&& chown -R ${NB_USER}:${NB_GROUP} /var/run/condor /var/lock/condor /var/log/condor /etc/condor
 
 ADD ./submithost/pegasusrc /home/${NB_USER}/ghubex1/pegasusrc
 
@@ -253,9 +233,9 @@ RUN /home/${NB_USER}/ghubex1/vortex-sshslurm-blahp/install.sh --host VORTEX_USER
 ADD ./submithost/pegasus-wms-setup-files/60-vortex-sshslurm.config /etc/condor/config.d/60-vortex-sshslurm.config
 
 # Set up config for ensemble manager and service
-#RUN mkdir /home/${NB_USER}/.pegasus \
-RUN echo -e "#!/usr/bin/env python3\nUSERNAME='${NB_USER}'\nPASSWORD='${NB_USER}123'\nAUTHENTICATION='NoAuthentication'\nSERVER_HOST='0.0.0.0'\n" >> /home/${NB_USER}/.pegasus/service.py \
-    && chmod u+x /home/${NB_USER}/.pegasus/service.py
+RUN mkdir /home/${NB_USER}/.pegasus && \
+    echo -e "#!/usr/bin/env python3\nUSERNAME='${NB_USER}'\nPASSWORD='${NB_USER}123'\nAUTHENTICATION='NoAuthentication'\nSERVER_HOST='0.0.0.0'\n" >> /home/${NB_USER}/.pegasus/service.py && \
+    chmod u+x /home/${NB_USER}/.pegasus/service.py
 
 # ====================================================================
 # Notebook Configurations
@@ -275,8 +255,8 @@ RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/CPP/CPP_Build.sh
 RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/CPP/CPP_Launch.sh
 RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/Fortran/Fortran_Build.sh
 RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/Fortran/Fortran_Launch.sh
-#RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/MATLAB/MATLAB_Build.sh
-#RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/MATLAB/MATLAB_Launch.sh
+RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/MATLAB/MATLAB_Build.sh
+RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/MATLAB/MATLAB_Launch.sh
 RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/Python/Python_Launch.sh
 RUN chmod 555 /home/${NB_USER}/ghubex1/remotebin/R/R_Launch.sh
 
