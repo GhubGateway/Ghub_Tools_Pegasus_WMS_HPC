@@ -2,7 +2,9 @@
 # https://htcondor.readthedocs.io/en/latest/admin-manual/configuration-macros.html#configuration-file-entries-for-dagman
 # https://pegasus.isi.edu/documentation/reference-guide/configuration.html#properties
 
-#pegasus.catalog.site.file=./conf/sites.yml
+# Use timestamps instead of runNNNN for the run names.
+# If an error occurs, the run name directory on the remote host may not get automatically deleted, causing any subsequent runs using the same run name to fail.
+pegasus.dir.useTimestamp = true
 
 pegasus.data.configuration = nonsharedfs
 
@@ -12,9 +14,6 @@ pegasus.transfer.worker.package = true
 # staging site is on the compute site's shared filesystem: symlink inputs
 # instead of copying them into the PegasusLite work dir
 pegasus.transfer.links = true
-
-#pegasus.catalog.replica  File
-#pegasus.catalog.replica.file ./conf/rc.data
 
 # Default: seqexec (or pegasus-cluster): Runs clustered small tasks sequentially or inside a single node environment.
 pegasus.clusterer.job.aggregator seqexec

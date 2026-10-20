@@ -2,7 +2,7 @@
 tool_alias_name=$1
 
 rm -f ./build.log
-
+rm -f ./anaconda/Miniconda3-py310_25.11.1-1-Linux-x86_64.sh
 rm -f ./submithost/.ssh/id_ed25519
 rm -f ./submithost/.ssh/id_ed25519.pub
 

@@ -12,8 +12,11 @@ The repository contains a Dockerfile for JupyterHub DockerSpawner, which enables
 
 ## One-Time Setup
 
-- The configure_tool.sh bash script requires that you have previouly generated and uploaded a ssh key pair for UB-HPC access. Please see [Login Node](https://docs.ccr.buffalo.edu/en/latest/hpc/login/) or more information.
+- Requires a valid CCR account and home directory.
 
+- Requires that you have previously generated and uploaded a ssh key pair for UB-HPC access. Please see [Login Node](https://docs.ccr.buffalo.edu/en/latest/hpc/login/) for more information.
+
+- Tested with ssh-keygen -t ed25519 -C "VORTEX_USER@VORTEX_HOST", saved to ~/.ssh/id_ed25519, with an empty passphrase.
 
 ## Usage
 
